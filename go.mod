@@ -1,8 +1,8 @@
 module github.com/InazumaV/V2bX
 
-go 1.25
+go 1.27.3
 
-toolchain go1.25.0
+godebug multipathtcp=0
 
 require (
 	github.com/apernet/hysteria/core/v2 v2.6.4
@@ -332,4 +332,4 @@ require (
 
 replace github.com/sagernet/sing-box v1.13.0 => github.com/wyx2685/sing-box_mod v1.13.0-alpha.5.0.20251202212447-8d054dcd8bfe
 
-replace github.com/xtls/xray-core v1.251202.0 => github.com/wyx2685/xray-core v0.0.0-20251202200223-63db1dc9e9e2
+replace github.com/xtls/xray-core v1.251202.0 => github.com/xn9kqy58k/xray-core v0.0.0-20261102094610-d8ccb507c9cc

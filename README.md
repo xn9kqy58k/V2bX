@@ -44,18 +44,30 @@ A V2board node server based on multi core, modified from XrayR.
 
 ## 软件安装
 
+### Linux 内核安全提示
+
+针对 CVE-2026-98432，本维护版本默认关闭 MPTCP，并移植 Xray 的监听防护和 Go 1.27.3 兼容补丁。
+这属于应用层缓解，部署新版本后仍需更新宿主机内核并重启；已有 MPTCP 监听也需要重启对应服务。
+具体检查、临时措施和容器注意事项见 [CVE-2026-98432 处理说明](docs/security/CVE-2026-98432.md)。
+
 ### 一键安装
 
-```
-wget -N https://raw.githubusercontent.com/wyx2685/V2bX-script/master/install.sh && bash install.sh
-```
+原上游一键安装脚本下载上游产物，不包含本维护仓库的安全更新。
+当前请按下方说明从本维护仓库源码构建，替换现有服务的二进制后重启。
 
 ### 手动安装
 
-[手动安装教程](https://v2bx.v-50.me/v2bx/v2bx-xia-zai-he-an-zhuang/install/manual)
+从本维护仓库源码构建后，将 `build_assets/V2bX` 替换现有服务的二进制，保留原有配置并重启服务。
 
 ## 构建
+
+使用 Go 1.27.3 或更高版本，克隆本维护仓库后构建：
+
 ``` bash
+git clone --branch dev_new https://github.com/xn9kqy58k/V2bX.git
+cd V2bX
+mkdir -p build_assets
+version=$(git rev-parse --short HEAD)
 # 通过-tags选项指定要编译的内核， 可选 xray， sing, hysteria2
 GOEXPERIMENT=jsonv2 go build -v -o build_assets/V2bX -tags "sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor" -trimpath -ldflags "-X 'github.com/InazumaV/V2bX/cmd.version=$version' -s -w -buildid="
 ```
