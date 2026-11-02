@@ -7,6 +7,17 @@ on:
   pull_request:
     branches:
       - 'dev_new'
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - Dockerfile
+      - .dockerignore
+      - .github/workflows/Publish Docker image.yml
+
+permissions:
+  contents: read
+  packages: write
 
 env:
   REGISTRY: ghcr.io
@@ -43,6 +54,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -55,15 +67,19 @@ jobs:
         with:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
+          cache-from: type=gha,scope=v2bx-${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=v2bx-${{ env.PLATFORM_PAIR }}
 
       - name: Export digest
+        if: github.event_name != 'pull_request'
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           echo "${digest#sha256:}" > "/tmp/digests/${digest#sha256:}"
   
       - name: Upload digest
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: digests-${{ env.PLATFORM_PAIR }}
@@ -72,6 +88,7 @@ jobs:
           retention-days: 1
 
   merge:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs:
       - build

@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.vscode
+build_assets
+output
+V2bX
+V2bX.exe
+V2bX-*.zip
+V2bX-*.dgst
+**/*.log
+**/*.tmp

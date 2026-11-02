@@ -38,10 +38,12 @@ func (p *Conf) LoadFromPath(filePath string) error {
 		return fmt.Errorf("read config file error: %s", err)
 	}
 
-	err = json.Unmarshal(data, p)
+	next := New()
+	err = json.Unmarshal(data, next)
 	if err != nil {
 		return fmt.Errorf("unmarshal config error: %s", err)
 	}
 
+	*p = *next
 	return nil
 }

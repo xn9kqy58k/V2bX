@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 
 	"github.com/InazumaV/V2bX/conf"
@@ -54,13 +55,7 @@ func serverHandle(_ *cobra.Command, _ []string) {
 	case "error":
 		log.SetLevel(log.ErrorLevel)
 	}
-	if c.LogConfig.Output != "" {
-		f, err := os.OpenFile(c.LogConfig.Output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			log.WithField("err", err).Error("Open log file failed, using stdout instead")
-		}
-		log.SetOutput(f)
-	}
+	defer configureLogOutput(c.LogConfig.Output)()
 	limiter.Init()
 	log.Info("Start V2bX...")
 	vc, err := vCore.NewCore(c.CoresConfig)
@@ -73,7 +68,16 @@ func serverHandle(_ *cobra.Command, _ []string) {
 		log.WithField("err", err).Error("Start core failed")
 		return
 	}
-	defer vc.Close()
+	var lifecycleMu sync.Mutex
+	stopping := false
+	defer func() {
+		lifecycleMu.Lock()
+		defer lifecycleMu.Unlock()
+		stopping = true
+		if vc != nil {
+			vc.Close()
+		}
+	}()
 	log.Info("Core ", vc.Type(), " started")
 	nodes := node.New()
 	err = nodes.Start(c.NodeConfig, vc)
@@ -86,12 +90,19 @@ func serverHandle(_ *cobra.Command, _ []string) {
 	sdns := os.Getenv("SING_DNS_PATH")
 	if watch {
 		err = c.Watch(config, xdns, sdns, func() {
-			nodes.Close()
-			err = vc.Close()
-			if err != nil {
-				log.WithField("err", err).Error("Restart node failed")
+			lifecycleMu.Lock()
+			defer lifecycleMu.Unlock()
+			if stopping {
 				return
 			}
+			nodes.Close()
+			if vc != nil {
+				if err := vc.Close(); err != nil {
+					log.WithField("err", err).Error("Restart node failed")
+					return
+				}
+			}
+			var err error
 			vc, err = vCore.NewCore(c.CoresConfig)
 			if err != nil {
 				log.WithField("err", err).Error("New core failed")
@@ -122,6 +133,7 @@ func serverHandle(_ *cobra.Command, _ []string) {
 	{
 		osSignals := make(chan os.Signal, 1)
 		signal.Notify(osSignals, syscall.SIGINT, syscall.SIGTERM)
+		defer signal.Stop(osSignals)
 		<-osSignals
 	}
 }

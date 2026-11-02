@@ -1,101 +1,87 @@
-# V2bX
+# V2bX（自维护版）
 
-[![](https://img.shields.io/badge/TgChat-UnOfficialV2Board%E4%BA%A4%E6%B5%81%E7%BE%A4-green)](https://t.me/unofficialV2board)
-[![](https://img.shields.io/badge/TgChat-YuzukiProjects%E4%BA%A4%E6%B5%81%E7%BE%A4-blue)](https://t.me/YuzukiProjects)
+[![Linux 与 Docker 检查](https://github.com/xn9kqy58k/V2bX/actions/workflows/security-regression.yml/badge.svg)](https://github.com/xn9kqy58k/V2bX/actions/workflows/security-regression.yml)
+[![多平台构建](https://github.com/xn9kqy58k/V2bX/actions/workflows/release.yml/badge.svg)](https://github.com/xn9kqy58k/V2bX/actions/workflows/release.yml)
 
-A V2board node server based on multi core, modified from XrayR.  
-一个基于多种内核的V2board节点服务端，修改自XrayR，支持V2ay,Trojan,Shadowsocks协议。
+这是我们自己维护的 V2bX，用来把 V2board 兼容面板和节点服务器连起来。
+支持 Xray、sing-box、Hysteria2 多种核心，以及节点管理、流量统计、限速、在线 IP 限制和证书管理。具体协议能否使用，还取决于面板和所选核心。
 
-**注意： 本项目需要搭配[修改版V2board](https://github.com/wyx2685/v2board)**
+[我们的仓库](https://github.com/xn9kqy58k/V2bX) · [版本下载](https://github.com/xn9kqy58k/V2bX/releases) · [构建下载](https://github.com/xn9kqy58k/V2bX/actions/workflows/release.yml) · [问题反馈](https://github.com/xn9kqy58k/V2bX/issues) · [提交记录](https://github.com/xn9kqy58k/V2bX/commits/dev_new/) · [配套 Xray 补丁](https://github.com/xn9kqy58k/xray-core/tree/security/v2bx-mptcp-go1273-backport)
 
-## 特点
+当前维护分支是 `dev_new`。安装、更新和反馈都以本仓库为准。
 
-* 永久开源且免费。
-* 支持Vmess/Vless, Trojan， Shadowsocks, Hysteria1/2多种协议。
-* 支持Vless和XTLS等新特性。
-* 支持单实例对接多节点，无需重复启动。
-* 支持限制在线IP。
-* 支持限制Tcp连接数。
-* 支持节点端口级别、用户级别限速。
-* 配置简单明了。
-* 修改配置自动重启实例。
-* 支持多种内核，易扩展。
-* 支持条件编译，可仅编译需要的内核。
+## 每次优化都改了什么
 
-## 功能介绍
+这里按维护批次记录。以后每轮优化都在最上面新增一条，直接说明改了什么、有什么用、升级时要做什么。
 
-| 功能        | v2ray | trojan | shadowsocks | hysteria1/2 |
-|-----------|-------|--------|-------------|----------|
-| 自动申请tls证书 | √     | √      | √           | √        |
-| 自动续签tls证书 | √     | √      | √           | √        |
-| 在线人数统计    | √     | √      | √           | √        |
-| 审计规则      | √     | √      | √           | √         |
-| 自定义DNS    | √     | √      | √           | √        |
-| 在线IP数限制   | √     | √      | √           | √        |
-| 连接数限制     | √     | √      | √           | √         |
-| 跨节点IP数限制  |√      |√       |√            |√          |
-| 按照用户限速    | √     | √      | √           | √         |
-| 动态限速(未测试) | √     | √      | √           | √         |
+### 2026-11-02 · 第二次优化：减少出错停机，改善构建
 
-## TODO
+- **配置暂时写坏，也先让节点继续跑。** 新配置先完整读取、解析，成功后才替换旧配置。JSON 写错或保存到一半时，不再清空旧配置并触发重启。
+- **文件监听出错会收好尾。** 启动监听失败时释放资源；监听关闭后取消还没执行的重载；重载回调顺序执行，避免挤在一起。
+- **日志路径填错，也能继续看日志。** 日志文件打不开时改用标准输出，不再把空文件对象交给日志系统；退出时关闭打开的日志文件。
+- **退出时关掉当前正在使用的核心。** 热重载和退出互相协调，避免关到旧核心，或退出过程中又启动一个新核心。
+- **Docker 少做重复工作。** 改业务代码时可以复用已下载的依赖，同一台构建机还可复用 Go 编译缓存；ARM64 镜像的 Go 程序改为在构建机上交叉编译。Git 历史、临时文件和本地构建产物不再带进构建上下文。
+- **提交检查和发布分开。** PR 只验证 Docker 构建；正式发布或手动发布时才上传镜像。自动检查增加配置、日志和 AMD64 / ARM64 容器启动验证。
+- **说明文档归我们自己维护。** 首页的仓库、下载、反馈、构建和核心补丁链接全部指向我们的账号；配置说明和安全处理说明也放进本仓库。
 
-- [ ] 重新实现动态限速
-- [ ] 完善使用文档
+升级时：替换二进制或重建镜像，然后重启服务。配置字段和默认配置路径不变，不需要为了这次优化重写配置。构建优化没有做固定倍数的提速承诺，实际耗时取决于机器和缓存。
 
-## 软件安装
+### 2026-11-02 · 第一次优化：降低 Linux 内核漏洞的暴露面
 
-### Linux 内核安全提示
+- **默认不用 MPTCP 监听。** 针对 CVE-2026-98432，关闭 Go 的默认 MPTCP，并把 Xray 的对应监听防护移植到我们维护的核心。
+- **升级编译工具时，把兼容补丁一起带上。** 构建统一使用 Go 1.27.3，修正 Vision 使用 TLS 缓冲区的兼容问题。
+- **保留原来的多核心和 KCP 功能。** 没有直接套用会删除旧功能、打乱现有依赖的整套新版核心。
+- **增加实际监听检查。** 在 Linux 上创建 socket，验证最终使用的是普通 TCP；同时检查 TLS 兼容和多核心合并构建。
 
-针对 CVE-2026-98432，本维护版本默认关闭 MPTCP，并移植 Xray 的监听防护和 Go 1.27.3 兼容补丁。
-这属于应用层缓解，部署新版本后仍需更新宿主机内核并重启；已有 MPTCP 监听也需要重启对应服务。
-具体检查、临时措施和容器注意事项见 [CVE-2026-98432 处理说明](docs/security/CVE-2026-98432.md)。
+升级时：部署新程序后重启 V2bX。这只是应用层缓解，服务器还需要安装修复后的 Linux 内核并重启。具体步骤见 [Linux 安全处理说明](docs/security/CVE-2026-98432.md)。
 
-### 一键安装
+## 下载与安装
 
-原上游一键安装脚本下载上游产物，不包含本维护仓库的安全更新。
-当前请按下方说明从本维护仓库源码构建，替换现有服务的二进制后重启。
+优先查看[我们的版本下载页](https://github.com/xn9kqy58k/V2bX/releases)。如果还没有适合的发布版本，可到[多平台构建页面](https://github.com/xn9kqy58k/V2bX/actions/workflows/release.yml)，选择最近成功的构建，在 Artifacts 中下载对应系统和 CPU 的文件；下载构建产物通常需要登录 GitHub。
 
-### 手动安装
+安装或更新前备份现有程序和 `/etc/V2bX` 配置目录。替换程序后，使用你原来的服务管理方式重启。配置样例见 [example/config.json](example/config.json)，日常操作见[使用说明](docs/usage.md)。
 
-从本维护仓库源码构建后，将 `build_assets/V2bX` 替换现有服务的二进制，保留原有配置并重启服务。
+旧上游的一键安装脚本仍会下载上游产物，不能保证包含这里的维护补丁。请从本仓库下载或构建。
 
-## 构建
+## 从源码构建
 
-使用 Go 1.27.3 或更高版本，克隆本维护仓库后构建：
+需要 Go 1.27.3 或更高版本。下面是 Linux / macOS 的命令：
 
-``` bash
+```sh
 git clone --branch dev_new https://github.com/xn9kqy58k/V2bX.git
 cd V2bX
 mkdir -p build_assets
 version=$(git rev-parse --short HEAD)
-# 通过-tags选项指定要编译的内核， 可选 xray， sing, hysteria2
-GOEXPERIMENT=jsonv2 go build -v -o build_assets/V2bX -tags "sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor" -trimpath -ldflags "-X 'github.com/InazumaV/V2bX/cmd.version=$version' -s -w -buildid="
+module=$(go list -m)
+GOEXPERIMENT=jsonv2 CGO_ENABLED=0 go build -mod=readonly -trimpath \
+  -o build_assets/V2bX \
+  -tags "sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor" \
+  -ldflags "-X ${module}/cmd.version=${version} -s -w -buildid=" .
 ```
 
-## 配置文件及详细使用教程
+生成的程序在 `build_assets/V2bX`。先用 `build_assets/V2bX version` 确认可以启动，再替换服务器上的程序。
 
-[详细使用教程](https://v2bx.v-50.me/)
+## 使用 Docker
 
-## 免责声明
+在本仓库目录构建镜像：
 
-* 此项目用于本人自用，因此本人不能保证向后兼容性。
-* 由于本人能力有限，不能保证所有功能的可用性，如果出现问题请在Issues反馈。
-* 本人不对任何人使用本项目造成的任何后果承担责任。
-* 本人比较多变，因此本项目可能会随想法或思路的变动随性更改项目结构或大规模重构代码，若不能接受请勿使用。
+```sh
+docker build -t v2bx:local .
+```
 
-## 赞助
+确认 `/etc/V2bX/config.json` 已按自己的面板、节点和证书信息配置好，再在 Linux 服务器启动：
 
-[赞助链接](https://v-50.me/)
+```sh
+docker run -d --name v2bx --restart unless-stopped --network host \
+  -v /etc/V2bX:/etc/V2bX v2bx:local
+```
 
-## Thanks
+镜像默认运行 `V2bX server --config /etc/V2bX/config.json`。修改配置后先查看日志；更新程序需要重建镜像并重建容器。容器与宿主机共用内核，内核漏洞仍需在宿主机处理。
 
-* [Project X](https://github.com/XTLS/)
-* [V2Fly](https://github.com/v2fly)
-* [VNet-V2ray](https://github.com/ProxyPanel/VNet-V2ray)
-* [Air-Universe](https://github.com/crossfw/Air-Universe)
-* [XrayR](https://github.com/XrayR/XrayR)
-* [sing-box](https://github.com/SagerNet/sing-box)
+## 遇到问题
 
-## Stars 增长记录
+到[我们的问题反馈页](https://github.com/xn9kqy58k/V2bX/issues)说明系统、CPU 架构、程序版本、使用的核心，以及相关报错。发配置前请去掉面板密钥、证书私钥和账号信息。
 
-[![Stargazers over time](https://starchart.cc/wyx2685/V2bX.svg)](https://starchart.cc/wyx2685/V2bX)
+## 来源与授权
+
+本项目保留原有提交历史、版权声明和 [MPL-2.0 许可证](LICENSE)。上游项目和依赖作者的贡献见[来源与致谢](docs/ACKNOWLEDGEMENTS.md)。
