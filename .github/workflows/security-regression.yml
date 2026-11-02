@@ -1,0 +1,53 @@
+name: Linux security regression
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev_new, 'fix/**']
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - Dockerfile
+      - .github/workflows/security-regression.yml
+  pull_request:
+    branches: [dev_new]
+    paths:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - Dockerfile
+      - .github/workflows/security-regression.yml
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CGO_ENABLED: '0'
+      GOEXPERIMENT: jsonv2
+      V2BX_REQUIRE_MPTCP: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Resolve module graph
+        run: go mod tidy
+      - name: Upload resolved module files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-module-lock
+          path: |
+            go.mod
+            go.sum
+      - name: Enable MPTCP on the disposable runner for regression coverage
+        run: sudo sysctl -w net.mptcp.enabled=1
+      - name: Test default TCP listeners and Xray's explicit MPTCP opt-out
+        run: go test -mod=readonly -v -run '^(TestMPTCPDisabledByDefault|TestXrayDisablesMPTCPByDefault)$' .
+      - name: Build all supported cores together
+        run: go build -mod=readonly -trimpath -o /tmp/V2bX -tags 'sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor' .

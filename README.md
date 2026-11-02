@@ -44,17 +44,25 @@ A V2board node server based on multi core, modified from XrayR.
 
 ## 软件安装
 
+### Linux 内核安全提示
+
+针对 CVE-2026-98432，本维护版本默认关闭 MPTCP，并同步更新 Go、Xray 和 REALITY。
+这属于应用层缓解，部署新版本后仍需更新宿主机内核并重启；已有 MPTCP 监听也需要重启对应服务。
+具体检查、临时措施和容器注意事项见 [CVE-2026-98432 处理说明](docs/security/CVE-2026-98432.md)。
+
 ### 一键安装
 
-```
-wget -N https://raw.githubusercontent.com/wyx2685/V2bX-script/master/install.sh && bash install.sh
-```
+原上游一键安装脚本下载上游产物，不包含本维护仓库的安全更新。
+部署本维护版本请使用本仓库发布的产物，或按下方说明从本仓库源码构建，替换现有服务的二进制后重启。
 
 ### 手动安装
 
 [手动安装教程](https://v2bx.v-50.me/v2bx/v2bx-xia-zai-he-an-zhuang/install/manual)
 
 ## 构建
+
+使用 Go 1.27.3 或更高版本，在本仓库根目录执行：
+
 ``` bash
 # 通过-tags选项指定要编译的内核， 可选 xray， sing, hysteria2
 GOEXPERIMENT=jsonv2 go build -v -o build_assets/V2bX -tags "sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor" -trimpath -ldflags "-X 'github.com/InazumaV/V2bX/cmd.version=$version' -s -w -buildid="

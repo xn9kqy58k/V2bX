@@ -1,8 +1,8 @@
 module github.com/InazumaV/V2bX
 
-go 1.25
+go 1.27.3
 
-toolchain go1.25.0
+godebug multipathtcp=0
 
 require (
 	github.com/apernet/hysteria/core/v2 v2.6.4
@@ -18,7 +18,7 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.19.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
-	github.com/xtls/xray-core v1.251202.0
+	github.com/xtls/xray-core v1.260930.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.44.0
 	golang.org/x/sys v0.38.0
@@ -287,7 +287,7 @@ require (
 	github.com/vultr/govultr/v3 v3.21.1 // indirect
 	github.com/wyx2685/sing-vmess v0.0.0-20250723121437-95d5ab59ff92 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	github.com/xtls/reality v0.0.0-20251014195629-e4eec4520535 // indirect
+	github.com/xtls/reality v0.0.0-20261014101318-83f621788ca8 // indirect
 	github.com/yandex-cloud/go-genproto v0.14.0 // indirect
 	github.com/yandex-cloud/go-sdk/services/dns v0.0.3 // indirect
 	github.com/yandex-cloud/go-sdk/v2 v2.0.8 // indirect
@@ -332,4 +332,6 @@ require (
 
 replace github.com/sagernet/sing-box v1.13.0 => github.com/wyx2685/sing-box_mod v1.13.0-alpha.5.0.20251202212447-8d054dcd8bfe
 
-replace github.com/xtls/xray-core v1.251202.0 => github.com/wyx2685/xray-core v0.0.0-20251202200223-63db1dc9e9e2
+replace github.com/xtls/xray-core v1.260930.0 => github.com/wyx2685/xray-core v0.0.0-20261102040409-dcfae7c4776b
+
+replace github.com/xtls/reality => github.com/wyx2685/REALITY v0.0.0-20261102081311-25ea3c0fa255
