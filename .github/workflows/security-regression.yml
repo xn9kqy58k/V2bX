@@ -36,6 +36,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Resolve module graph
+        id: modules
         run: go mod tidy
       - name: Upload resolved module files
         if: always()
@@ -45,9 +46,17 @@ jobs:
           path: |
             go.mod
             go.sum
+      - name: Test Vision TLS buffer compatibility
+        run: go test -mod=readonly -v -run '^TestAccessTLSBuffers$' github.com/xtls/xray-core/proxy/vless
       - name: Enable MPTCP on the disposable runner for regression coverage
         run: sudo sysctl -w net.mptcp.enabled=1
       - name: Test default TCP listeners and Xray's explicit MPTCP opt-out
+        if: ${{ !cancelled() && steps.modules.outcome == 'success' }}
         run: go test -mod=readonly -v -run '^(TestMPTCPDisabledByDefault|TestXrayDisablesMPTCPByDefault)$' .
       - name: Build all supported cores together
+        id: build
+        if: ${{ !cancelled() && steps.modules.outcome == 'success' }}
         run: go build -mod=readonly -trimpath -o /tmp/V2bX -tags 'sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor' .
+      - name: Smoke test the Linux binary
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: /tmp/V2bX version

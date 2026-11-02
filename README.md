@@ -46,7 +46,7 @@ A V2board node server based on multi core, modified from XrayR.
 
 ### Linux 内核安全提示
 
-针对 CVE-2026-98432，本维护版本默认关闭 MPTCP，并同步更新 Go、Xray 和 REALITY。
+针对 CVE-2026-98432，本维护版本默认关闭 MPTCP，并移植 Xray 的监听防护和 Go 1.27.3 兼容补丁。
 这属于应用层缓解，部署新版本后仍需更新宿主机内核并重启；已有 MPTCP 监听也需要重启对应服务。
 具体检查、临时措施和容器注意事项见 [CVE-2026-98432 处理说明](docs/security/CVE-2026-98432.md)。
 
