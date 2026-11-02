@@ -2,6 +2,15 @@ name: Build and Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Optional version label, for example v0.4.2'
+        type: string
+        required: false
+      publish_release:
+        description: 'Publish all successfully built packages to our repository'
+        type: boolean
+        default: false
   push:
     branches:
       - master
@@ -10,6 +19,8 @@ on:
       - "**/*.go"
       - "go.mod"
       - "go.sum"
+      - "scripts/**"
+      - "example/**"
       - ".github/workflows/release.yml"
   pull_request:
     types: [opened, synchronize, reopened]
@@ -17,13 +28,51 @@ on:
       - "**/*.go"
       - "go.mod"
       - "go.sum"
+      - "scripts/**"
+      - "example/**"
       - ".github/workflows/release.yml"
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 jobs:
 
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release inputs and installer
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release }}
+        run: |
+          if [[ -n "$RELEASE_TAG" && ! "$RELEASE_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+            echo 'Invalid release tag' >&2
+            exit 1
+          fi
+          if [[ "$PUBLISH_RELEASE" == 'true' && -z "$RELEASE_TAG" ]]; then
+            echo 'Publishing requires release_tag' >&2
+            exit 1
+          fi
+          if [[ "$PUBLISH_RELEASE" == 'true' ]]; then
+            if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG"; then
+              echo 'Publishing requires a new, unused tag; existing tags are never moved.' >&2
+              exit 1
+            else
+              status=$?
+              [[ "$status" == 2 ]] || exit "$status"
+            fi
+          fi
+          bash -n scripts/install.sh
+          bash scripts/tests/install_test.sh
+
   build:
+    needs: validate
+    permissions:
+      contents: write
     strategy:
       matrix:
         # Include amd64 on all platforms.
@@ -120,8 +169,10 @@ jobs:
           echo "version=$(echo $GITHUB_REF | cut -d / -f 3)" >> $GITHUB_ENV
       - name: Get other version
         if: ${{ github.event_name != 'release' }}
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          echo "version=${{ github.sha }}" >> $GITHUB_ENV
+          echo "version=${RELEASE_TAG:-$GITHUB_SHA}" >> $GITHUB_ENV
       - name: Build V2bX
         run: |
           echo "version: $version"
@@ -143,14 +194,10 @@ jobs:
           cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
           cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
           cp ${GITHUB_WORKSPACE}/example/*.json ./build_assets/
-          LIST=('geoip' 'geosite')
-          for i in "${LIST[@]}"
-          do
-            DOWNLOAD_URL="https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/${i}.dat"
-            FILE_NAME="${i}.dat"
-            echo -e "Downloading ${DOWNLOAD_URL}..."
-            curl -L "${DOWNLOAD_URL}" -o ./build_assets/${FILE_NAME}
-          done
+          cp ${GITHUB_WORKSPACE}/example/*.dat ./build_assets/
+          cp ${GITHUB_WORKSPACE}/example/*.db ./build_assets/
+          cp -R ${GITHUB_WORKSPACE}/docs ./build_assets/docs
+          cp ${GITHUB_WORKSPACE}/scripts/install.sh ./build_assets/install.sh
       - name: Create ZIP archive
         shell: bash
         run: |
@@ -158,21 +205,19 @@ jobs:
           touch -mt $(date +%Y01010000) *
           zip -9vr ../V2bX-$ASSET_NAME.zip .
           popd || exit 1
-          FILE=./V2bX-$ASSET_NAME.zip
+          FILE=V2bX-$ASSET_NAME.zip
+          sha256sum "$FILE" > "$FILE.sha256"
           DGST=$FILE.dgst
           for METHOD in {"md5","sha1","sha256","sha512"}
           do
             openssl dgst -$METHOD $FILE | sed 's/([^)]*)//g' >>$DGST
           done
-      - name: Change the name
-        run: |
-          mv build_assets V2bX-$ASSET_NAME
       - name: Upload files to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: V2bX-${{ steps.get_filename.outputs.ASSET_NAME }}
           path: |
-            ./V2bX-${{ steps.get_filename.outputs.ASSET_NAME }}/*
+            ./V2bX-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         if: github.event_name == 'release'
@@ -181,3 +226,58 @@ jobs:
           file: ./V2bX-${{ steps.get_filename.outputs.ASSET_NAME }}.zip*
           tag: ${{ github.ref }}
           file_glob: true
+
+  publish:
+    if: github.repository == 'xn9kqy58k/V2bX' && github.event_name == 'workflow_dispatch' && inputs.publish_release
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: V2bX-*
+          path: release_assets
+          merge-multiple: true
+      - name: Verify packages and publish our release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          cd release_assets
+          for checksum in *.zip.sha256; do
+            sha256sum -c "$checksum"
+          done
+          cd ..
+          cp scripts/install.sh release_assets/install.sh
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG"; then
+            echo 'The requested tag already exists; refusing to publish mismatched source.' >&2
+            exit 1
+          else
+            status=$?
+            [[ "$status" == 2 ]] || exit "$status"
+          fi
+          gh release create "$RELEASE_TAG" release_assets/* \
+            --target "$GITHUB_SHA" --title "V2bX $RELEASE_TAG" \
+            --notes-file docs/releases/installer-release.md --latest
+      - name: Verify public install and update downloads in isolated directories
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          install_dir="$RUNNER_TEMP/v2bx-public-check/bin"
+          config_dir="$RUNNER_TEMP/v2bx-public-check/config"
+          service_dir="$RUNNER_TEMP/v2bx-public-check/service"
+          sudo bash scripts/install.sh install --version "$RELEASE_TAG" \
+            --install-dir "$install_dir" --config-dir "$config_dir" \
+            --service-dir "$service_dir" --no-service
+          "$install_dir/V2bX" version | grep -F "$RELEASE_TAG"
+          sudo cp "$config_dir/config.json.example" "$config_dir/config.json"
+          before=$(sudo sha256sum "$config_dir/config.json")
+          sudo bash scripts/install.sh update \
+            --install-dir "$install_dir" --config-dir "$config_dir" \
+            --service-dir "$service_dir" --no-service
+          after=$(sudo sha256sum "$config_dir/config.json")
+          test "$before" = "$after"
+          "$install_dir/V2bX" version | grep -F "$RELEASE_TAG"

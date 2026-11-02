@@ -10,6 +10,7 @@ on:
       - go.sum
       - Dockerfile
       - .dockerignore
+      - 'scripts/**'
       - .github/workflows/security-regression.yml
   pull_request:
     branches: [dev_new]
@@ -19,6 +20,7 @@ on:
       - go.sum
       - Dockerfile
       - .dockerignore
+      - 'scripts/**'
       - .github/workflows/security-regression.yml
 
 permissions:
@@ -40,12 +42,18 @@ jobs:
       - name: Verify module graph
         id: modules
         run: go mod tidy -diff
+      - name: Check installer syntax and isolated behavior
+        run: |
+          bash -n scripts/install.sh
+          bash scripts/tests/install_test.sh
       - name: Test config loading and watcher cleanup
         env:
           CGO_ENABLED: '1'
         run: go test -mod=readonly -race -count=1 -timeout=60s ./conf
       - name: Test log output fallback and cleanup
         run: go test -mod=readonly -count=1 -timeout=30s -run '^TestConfigureLogOutput' ./cmd
+      - name: Test built-in update entry point without network access
+        run: go test -mod=readonly -count=1 -timeout=30s -run '^TestUpdateInstaller' ./cmd
       - name: Test Vision TLS buffer compatibility
         run: go test -mod=readonly -v -run '^TestAccessTLSBuffers$' github.com/xtls/xray-core/proxy/vless
       - name: Enable MPTCP on the disposable runner for regression coverage
@@ -60,7 +68,15 @@ jobs:
         run: go build -mod=readonly -trimpath -o /tmp/V2bX -tags 'sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor' .
       - name: Smoke test the Linux binary
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: /tmp/V2bX version
+        run: |
+          /tmp/V2bX version
+          if /tmp/V2bX not-a-real-command; then
+            echo 'Invalid commands must return a nonzero exit status.' >&2
+            exit 1
+          fi
+      - name: Install and update the real binary in an isolated directory
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: sudo bash scripts/tests/install_binary_test.sh /tmp/V2bX
 
   docker:
     name: Docker (${{ matrix.arch }})

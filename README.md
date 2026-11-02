@@ -14,6 +14,16 @@
 
 这里按维护批次记录。以后每轮优化都在最上面新增一条，直接说明改了什么、有什么用、升级时要做什么。
 
+### 2026-11-02 · 第三次优化：自己的安装和更新脚本
+
+- **复制命令就能安装和更新。** 脚本自动识别 Linux CPU 架构，只下载我们仓库 Release 中的程序，不再调用旧上游安装脚本。
+- **先检查，再换程序。** 下载后验证 SHA-256，再试运行新程序；校验不对或程序不能运行时，原来的程序不会被覆盖。重启服务失败会尝试恢复旧程序。
+- **自己的配置自己留着。** 更新不覆盖现有配置和辅助数据；第一次只生成配置样例，不会拿假面板地址启动。已有的自定义服务文件也会保留。
+- **程序里的更新命令也修好了。** `V2bX update` 使用同一套脚本，能识别当前程序目录；下载、执行出错会返回失败状态。
+- **发行包与脚本配套。** 每个包附带 SHA-256 文件，数据文件从我们仓库打包；发布前先做脚本和安装、更新、回滚检查。
+
+升级时：按下方“更新”命令操作。非默认路径的旧安装先确认程序位置，并按说明传入目录参数；Docker 部署继续通过重建镜像更新。
+
 ### 2026-11-02 · 第二次优化：减少出错停机，改善构建
 
 - **配置暂时写坏，也先让节点继续跑。** 新配置先完整读取、解析，成功后才替换旧配置。JSON 写错或保存到一半时，不再清空旧配置并触发重启。
@@ -37,11 +47,55 @@
 
 ## 下载与安装
 
-优先查看[我们的版本下载页](https://github.com/xn9kqy58k/V2bX/releases)。如果还没有适合的发布版本，可到[多平台构建页面](https://github.com/xn9kqy58k/V2bX/actions/workflows/release.yml)，选择最近成功的构建，在 Artifacts 中下载对应系统和 CPU 的文件；下载构建产物通常需要登录 GitHub。
+### 一键安装（Linux）
+
+复制下面整段运行。脚本和程序都从我们的仓库下载。以下命令使用 `sudo`；如果已经是 root，可以去掉 `sudo`。
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/xn9kqy58k/V2bX/dev_new/scripts/install.sh -o install-v2bx.sh &&
+sudo bash install-v2bx.sh install
+```
+
+默认程序位置是 `/usr/local/bin/V2bX`，配置目录是 `/etc/V2bX`，服务名称是 `V2bX.service`。需要 Bash、`curl` 或 `wget`、`unzip` 和 coreutils 中的 `sha256sum`、`timeout` 等命令；缺少时脚本会提示，不会自动升级系统。只有 `wget` 时，可以把上面的下载命令换成 `wget -O install-v2bx.sh https://raw.githubusercontent.com/xn9kqy58k/V2bX/dev_new/scripts/install.sh`。
+
+**第一次安装不会直接开节点。** 脚本生成 `/etc/V2bX/config.json.example`。先复制成正式配置，再填入自己的面板地址、密钥、节点编号和节点类型：
+
+```sh
+sudo cp /etc/V2bX/config.json.example /etc/V2bX/config.json
+```
+
+用你熟悉的编辑器修改 `/etc/V2bX/config.json`，填写真实信息后，在使用 systemd 的服务器上启动：
+
+```sh
+sudo systemctl enable --now V2bX.service
+sudo journalctl -u V2bX.service -n 50 --no-pager
+```
+
+没有 systemd 的环境，脚本会给出手动启动命令。更多参数及常见情况见[安装与更新说明](docs/install.md)。
+
+### 一键更新
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/xn9kqy58k/V2bX/dev_new/scripts/install.sh -o install-v2bx.sh &&
+sudo bash install-v2bx.sh update
+```
+
+这会更新到我们仓库的最新正式 Release，保留现有配置；原服务正在运行时会重启，原来没运行则保持停止。已安装本维护版时，也可以运行 `sudo V2bX update`。非默认程序路径可用 `--install-dir`，非默认配置目录可用 `--config-dir`；`V2bX update` 会自动找当前程序的真实目录。
+
+指定版本或只更新文件、不操作服务：
+
+```sh
+sudo bash install-v2bx.sh update --version v0.4.2
+sudo bash install-v2bx.sh update --install-dir /opt/V2bX --config-dir /opt/V2bX-config --no-service
+```
+
+### 手动下载
+
+程序包也可从[我们的版本下载页](https://github.com/xn9kqy58k/V2bX/releases)取得。开发中的构建可到[多平台构建页面](https://github.com/xn9kqy58k/V2bX/actions/workflows/release.yml)，选择成功的构建，在 Artifacts 中下载对应系统和 CPU 的文件；下载构建产物通常需要登录 GitHub。
 
 安装或更新前备份现有程序和 `/etc/V2bX` 配置目录。替换程序后，使用你原来的服务管理方式重启。配置样例见 [example/config.json](example/config.json)，日常操作见[使用说明](docs/usage.md)。
 
-旧上游的一键安装脚本仍会下载上游产物，不能保证包含这里的维护补丁。请从本仓库下载或构建。
+请使用上面的自有脚本或本仓库发行包，避免装回不含维护补丁的旧上游程序。
 
 ## 从源码构建
 

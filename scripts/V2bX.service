@@ -1,0 +1,17 @@
+[Unit]
+Description=V2bX node server
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/V2bX/config.json
+
+[Service]
+Type=simple
+WorkingDirectory="/etc/V2bX"
+ExecStart="/usr/local/bin/V2bX" server --config "/etc/V2bX/config.json"
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=1048576
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
